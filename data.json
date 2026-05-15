@@ -8,39 +8,6 @@
     "hotspots": []
   },
   {
-    "imageName": "halaman1.jpg",
-    "hotspots": [
-      {
-        "id": 1771296895501,
-        "audio": "aba.mp3",
-        "left": "62.42",
-        "top": "17.12",
-        "width": "11.75",
-        "height": "11.13"
-      },
-      {
-        "id": 1771296895502,
-        "audio": "bata.mp3",
-        "left": "36.25",
-        "top": "17.12",
-        "width": "11.75",
-        "height": "11.13"
-      },
-      {
-        "id": 1771296895503,
-        "audio": "tatsa.mp3",
-        "left": "10.08",
-        "top": "17.12",
-        "width": "11.75",
-        "height": "11.13"
-      }
-    ]
-  },
-  {
-    "imageName": "belakang.jpg",
-    "hotspots": []
-  },
-  {
     "imageName": "bismillah.jpg",
     "hotspots": []
   }
