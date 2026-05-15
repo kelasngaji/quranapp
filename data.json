@@ -34,17 +34,5 @@
   {
     "imageName": "daftarisi.jpg",
     "hotspots": []
-  },
-  {
-    "imageName": "halaman_1.jpg",
-    "hotspots": [
-      {
-        "audio": "aba.mp3",
-        "left": "40.15",
-        "top": "9.70",
-        "width": "19.69",
-        "height": "9.38"
-      }
-    ]
   }
 ]
