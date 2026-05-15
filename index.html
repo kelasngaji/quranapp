@@ -118,7 +118,6 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            /* Transisi transform untuk kelancaran zoom/geser */
             transition: transform 0.1s ease-out;
             transform-origin: center center;
             will-change: transform;
@@ -224,6 +223,10 @@
         let panStartX = 0;
         let panStartY = 0;
 
+        // Variabel Dimensi Terakhir (untuk limit geser)
+        let lastFinalW = 0;
+        let lastFinalH = 0;
+
         // --- LOGIKA UTAMA (SLIDE MULUS TANPA BLANK) ---
         function loadPage(index, direction = null) {
             if (index < 0 || index >= bookData.length) return;
@@ -324,7 +327,6 @@
         }
 
         function toggleNav() {
-            // Hanya toggle nav jika skala normal agar tidak mengganggu navigasi saat zoom
             if (scale <= 1.1) {
                 mainApp.classList.toggle('nav-hidden');
             }
@@ -345,17 +347,14 @@
             else if (e.key === "ArrowLeft") prevPage();
         });
 
-        // Logika Swipe & Pinch Zoom & Pan Terintegrasi
         bookContainer.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
-                // Mode Pinch Zoom
                 isZooming = true;
                 startDist = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
             } else if (e.touches.length === 1) {
-                // Mode Geser atau Slide
                 panStartX = e.touches[0].pageX;
                 panStartY = e.touches[0].pageY;
                 touchStartX = e.touches[0].screenX;
@@ -375,7 +374,6 @@
                 
                 applyZoom();
             } else if (e.touches.length === 1 && scale > 1) {
-                // Mode Pan (Geser) ketika diperbesar
                 e.preventDefault();
                 const currentX = e.touches[0].pageX;
                 const currentY = e.touches[0].pageY;
@@ -391,13 +389,12 @@
             if (isZooming) {
                 lastScale = scale;
                 if (e.touches.length < 2) isZooming = false;
+                applyZoom(); // Pastikan batas tetap terjaga setelah lepas jari
             } else if (scale > 1) {
-                // Simpan koordinat geser terakhir
                 lastTranslateX = translateX;
                 lastTranslateY = translateY;
             } else {
                 touchEndX = e.changedTouches[0].screenX;
-                // Hanya slide halaman jika skala normal
                 if (scale <= 1.1) {
                     handleSwipe();
                 }
@@ -410,16 +407,39 @@
             if (touchEndX > touchStartX + threshold) prevPage();
         }
 
+        // --- FUNGSI CLAMPING (BATAS GESER) ---
         function applyZoom() {
             const activeEl = document.getElementById('view' + currentViewId);
             const wrapper = activeEl.querySelector('.zoom-wrapper');
             
-            // Terapkan scale dan translate secara bersamaan
+            // Dapatkan ukuran container saat ini
+            const containerW = bookContainer.clientWidth;
+            const containerH = bookContainer.clientHeight;
+
+            // Hitung lebar & tinggi gambar setelah diperbesar
+            const zoomedW = lastFinalW * scale;
+            const zoomedH = lastFinalH * scale;
+
+            // Hitung batas maksimal geser (Limit)
+            // Limit adalah setengah dari selisih ukuran (karena transform-origin di center)
+            const limitX = Math.max(0, (zoomedW - containerW) / 2);
+            const limitY = Math.max(0, (zoomedH - containerH) / 2);
+
+            // Batasi Nilai Translate agar tidak keluar jalur
+            translateX = Math.min(Math.max(translateX, -limitX), limitX);
+            translateY = Math.min(Math.max(translateY, -limitY), limitY);
+
+            // Update variabel last untuk touch selanjutnya
+            lastTranslateX = translateX;
+            lastTranslateY = translateY;
+            
+            // Terapkan ke CSS
             wrapper.style.transform = `scale(${scale}) translate(${translateX / scale}px, ${translateY / scale}px)`;
             
-            // Sembunyikan navigasi saat diperbesar agar fokus
             if (scale > 1.2) {
                 mainApp.classList.add('nav-hidden');
+            } else {
+                // Jangan paksa hapus nav-hidden di sini agar toggle manual tetap bekerja
             }
         }
 
@@ -432,13 +452,12 @@
             lastTranslateY = 0;
             const wrapper = container.querySelector('.zoom-wrapper');
             if (wrapper) {
-                wrapper.style.transition = 'none'; // Instant reset
+                wrapper.style.transition = 'none';
                 wrapper.style.transform = `scale(1) translate(0, 0)`;
                 setTimeout(() => wrapper.style.transition = 'transform 0.1s ease-out', 50);
             }
         }
 
-        // Klik untuk toggle nav (dengan deteksi area klik)
         bookContainer.addEventListener('click', (e) => {
             if (!e.target.classList.contains('hotspot-zone') && scale <= 1.1) {
                 toggleNav();
@@ -500,6 +519,10 @@
                 finalH = dispW / ratioNat;
             }
 
+            // Simpan dimensi visual terakhir untuk kalkulasi batas geser
+            lastFinalW = finalW;
+            lastFinalH = finalH;
+
             layer.style.width = finalW + 'px';
             layer.style.height = finalH + 'px';
             
@@ -511,6 +534,7 @@
         window.addEventListener('resize', () => {
             const activeEl = document.getElementById('view' + currentViewId);
             syncDimensions(activeEl);
+            if (scale > 1) applyZoom(); // Update batas jika layar diputar/resize saat zoom
         });
 
         // --- FETCH DATA DARI data.json ---
