@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Qarana Digital App</title>
+    <style>
+        /* RESET & DASAR */
+        *, *::before, *::after { box-sizing: border-box; }
+        
+        body { 
+            margin: 0; 
+            background: #333; 
+            height: 100vh; 
+            width: 100vw;
+            overflow: hidden; 
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* CONTAINER UTAMA */
+        #mainApp {
+            width: 100%;
+            max-width: 600px; 
+            height: 100%;
+            background: transparent; 
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* --- 1. NAVIGASI (HEADER) --- */
+        .nav-bar {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+
+            background: rgba(34, 34, 34, 0.95); 
+            color: white;
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            
+            width: 100%; 
+            
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+
+            transition: top 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        .nav-hidden .nav-bar {
+            top: -80px; 
+        }
+
+        .nav-btn {
+            cursor: pointer;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: none;
+            width: 35px; height: 35px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        .nav-btn:hover { background-color: rgba(255, 255, 255, 0.3); }
+        .nav-btn:active { transform: scale(0.95); }
+
+        #pageIndicator { 
+            font-weight: 600; 
+            font-size: 1rem; 
+            color: #eee; 
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* --- 2. AREA GAMBAR (CANVAS) --- */
+        .book-container {
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* WADAH HALAMAN (Double Buffer System) */
+        .page-view {
+            position: absolute;
+            top: 0; 
+            left: 0;
+            width: 100%; 
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            
+            transition: transform 0.35s ease-out; 
+            will-change: transform;
+            
+            transform: translateX(100%); 
+        }
+        
+        .page-view.active { transform: translateX(0); z-index: 10; }
+        .page-view.left   { transform: translateX(-100%); z-index: 5; }
+        .page-view.right  { transform: translateX(100%); z-index: 5; }
+
+        /* Gambar Halaman */
+        .page-image {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain; 
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .page-image.is-cover {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; 
+        }
+
+        /* --- 3. HOTSPOT (AREA KLIK) --- */
+        .hotspot-layer {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        .hotspot-zone {
+            position: absolute;
+            cursor: pointer;
+            z-index: 20;
+            border-radius: 4px;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .hotspot-zone:active, .hotspot-zone.active {
+            background-color: rgba(255, 230, 0, 0.3);
+            border: 2px solid orange;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="mainApp">
+        <!-- HEADER / NAVIGASI -->
+        <div class="nav-bar" id="navBar">
+            <button class="nav-btn" onclick="prevPage(event)" title="Sebelumnya">❮</button>
+            <span id="pageIndicator">Memuat...</span>
+            <button class="nav-btn" onclick="nextPage(event)" title="Selanjutnya">❯</button>
+        </div>
+
+        <!-- AREA BUKU (Double Buffer) -->
+        <div class="book-container" onclick="toggleNav()">
+            
+            <!-- Wadah 1 -->
+            <div id="view1" class="page-view active">
+                <img class="page-image" src="" alt="">
+                <div class="hotspot-layer"></div>
+            </div>
+
+            <!-- Wadah 2 -->
+            <div id="view2" class="page-view right">
+                <img class="page-image" src="" alt="">
+                <div class="hotspot-layer"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- DATA BUKU ---
+        let bookData = []; 
+
+        // --- VARIABEL SISTEM ---
+        let currentPageIndex = 0;
+        let currentViewId = 1; 
+        
+        const mainApp = document.getElementById('mainApp');
+        const navBar = document.getElementById('navBar');
+        const pageIndicator = document.getElementById('pageIndicator');
+        let currentAudio = null;
+        let isAnimating = false;
+
+        // --- LOGIKA UTAMA (SLIDE MULUS TANPA BLANK) ---
+        function loadPage(index, direction = null) {
+            if (index < 0 || index >= bookData.length) return;
+            if (isAnimating) return; 
+
+            const activeEl = document.getElementById('view' + currentViewId);
+            const nextViewId = currentViewId === 1 ? 2 : 1;
+            const nextEl = document.getElementById('view' + nextViewId);
+
+            if (index === 0) {
+                pageIndicator.innerText = "Cover";
+            } else {
+                pageIndicator.innerText = `Halaman ${index}`; 
+            }
+
+            renderDataToElement(nextEl, index);
+
+            if (direction === null) {
+                renderDataToElement(activeEl, index);
+                
+                activeEl.style.transition = 'none';
+                activeEl.style.transform = 'translateX(0)';
+                nextEl.style.transition = 'none';
+                nextEl.style.transform = 'translateX(100%)'; 
+                return;
+            }
+
+            isAnimating = true;
+
+            nextEl.style.transition = 'none';
+            if (direction === 'next') {
+                nextEl.style.transform = 'translateX(100%)';
+            } else {
+                nextEl.style.transform = 'translateX(-100%)';
+            }
+
+            void nextEl.offsetWidth;
+
+            const transitionStyle = 'transform 0.35s ease-out';
+            activeEl.style.transition = transitionStyle;
+            nextEl.style.transition = transitionStyle;
+
+            if (direction === 'next') {
+                activeEl.style.transform = 'translateX(-100%)';
+                nextEl.style.transform = 'translateX(0)';
+            } else {
+                activeEl.style.transform = 'translateX(100%)';
+                nextEl.style.transform = 'translateX(0)';
+            }
+
+            setTimeout(() => {
+                isAnimating = false;
+                currentPageIndex = index;
+                currentViewId = nextViewId; 
+                
+                syncDimensions(nextEl);
+            }, 350); 
+        }
+
+        function renderDataToElement(containerEl, index) {
+            const data = bookData[index];
+            const imgEl = containerEl.querySelector('.page-image');
+            const layerEl = containerEl.querySelector('.hotspot-layer');
+
+            imgEl.src = "image/" + data.imageName;
+            
+            if (index === 0) {
+                imgEl.classList.add('is-cover');
+            } else {
+                imgEl.classList.remove('is-cover');
+            }
+
+            layerEl.innerHTML = '';
+            if (data.hotspots) {
+                data.hotspots.forEach(h => {
+                    const div = document.createElement('div');
+                    div.className = 'hotspot-zone';
+                    div.style.left = h.left + '%';
+                    div.style.top = h.top + '%';
+                    div.style.width = h.width + '%';
+                    div.style.height = h.height + '%';
+                    
+                    div.onclick = (e) => {
+                        e.stopPropagation(); 
+                        playAudio(h.audio, div);
+                    };
+                    
+                    layerEl.appendChild(div);
+                });
+            }
+            
+            imgEl.onload = () => syncDimensions(containerEl);
+            syncDimensions(containerEl);
+        }
+
+        function toggleNav() {
+            mainApp.classList.toggle('nav-hidden');
+        }
+
+        function prevPage(e) { 
+            if(e) e.stopPropagation(); 
+            loadPage(currentPageIndex - 1, 'prev'); 
+        }
+        function nextPage(e) { 
+            if(e) e.stopPropagation(); 
+            loadPage(currentPageIndex + 1, 'next'); 
+        }
+
+        // --- KEYBOARD & SWIPE CONTROL ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "ArrowRight") nextPage();
+            else if (e.key === "ArrowLeft") prevPage();
+        });
+
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+
+        function handleSwipe() {
+            const threshold = 50; 
+            if (touchEndX < touchStartX - threshold) nextPage();
+            if (touchEndX > touchStartX + threshold) prevPage();
+        }
+
+        // --- FITUR AUDIO ---
+        function playAudio(filename, element) {
+            document.querySelectorAll('.hotspot-zone').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+
+            const audioPath = "audio/" + filename;
+            const audio = new Audio(audioPath);
+            
+            audio.play()
+                .then(() => {
+                    currentAudio = audio;
+                    audio.onended = () => element.classList.remove('active');
+                })
+                .catch(error => {
+                    console.error("Audio error:", audioPath);
+                    const msg = new SpeechSynthesisUtterance("Audio " + filename);
+                    msg.lang = 'id-ID';
+                    window.speechSynthesis.speak(msg);
+                    setTimeout(() => element.classList.remove('active'), 1000);
+                });
+        }
+
+        // --- FITUR SINKRONISASI UKURAN PRESISI ---
+        function syncDimensions(containerEl) {
+            if (!containerEl) return;
+
+            const img = containerEl.querySelector('.page-image');
+            const layer = containerEl.querySelector('.hotspot-layer');
+            const nav = navBar;
+            
+            const natW = img.naturalWidth;
+            const natH = img.naturalHeight;
+            const dispW = img.clientWidth; 
+            const dispH = img.clientHeight; 
+
+            if (!natW || !natH) return; 
+
+            const ratioNat = natW / natH;
+            const ratioDisp = dispW / dispH;
+
+            let finalW, finalH;
+
+            if (ratioDisp > ratioNat) {
+                finalH = dispH;
+                finalW = dispH * ratioNat;
+            } else {
+                finalW = dispW;
+                finalH = dispW / ratioNat;
+            }
+
+            layer.style.width = finalW + 'px';
+            layer.style.height = finalH + 'px';
+            
+            if (containerEl.id === 'view' + currentViewId) {
+                nav.style.width = finalW + 'px';
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            const activeEl = document.getElementById('view' + currentViewId);
+            syncDimensions(activeEl);
+        });
+
+        // --- FETCH DATA DARI data.json ---
+        async function initApp() {
+            try {
+                const response = await fetch('data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                bookData = await response.json();
+            } catch (error) {
+                console.warn("Gagal memuat data.json. Menggunakan data sampel sementara.", error);
+                bookData = [
+                    { "imageName": "cover.jpg", "hotspots": [] },
+                    { "imageName": "halaman1.jpg", "hotspots": [] }
+                ];
+            }
+
+            if (bookData && bookData.length > 0) {
+                loadPage(0, null);
+            } else {
+                pageIndicator.innerText = "Data Kosong";
+            }
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
