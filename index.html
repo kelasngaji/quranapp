@@ -118,7 +118,8 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: transform 0.1s ease-out;
+            /* Transisi dihilangkan saat menggeser agar tidak ada delay/licin */
+            transition: none; 
             transform-origin: center center;
             will-change: transform;
         }
@@ -215,13 +216,12 @@
         let startDist = 0;
         let isZooming = false;
         
-        // Variabel Pan (Geser)
+        // Perbaikan Logic Pan (Geser) - Menggunakan Delta
         let translateX = 0;
         let translateY = 0;
-        let lastTranslateX = 0;
-        let lastTranslateY = 0;
-        let panStartX = 0;
-        let panStartY = 0;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let isPanning = false;
 
         // Variabel Dimensi Terakhir (untuk limit geser)
         let lastFinalW = 0;
@@ -285,7 +285,6 @@
                 isAnimating = false;
                 currentPageIndex = index;
                 currentViewId = nextViewId; 
-                
                 syncDimensions(nextEl);
             }, 350); 
         }
@@ -347,6 +346,10 @@
             else if (e.key === "ArrowLeft") prevPage();
         });
 
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        // --- LOGIKA SENTUHAN DIPERHALUS ---
         bookContainer.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
                 isZooming = true;
@@ -355,8 +358,9 @@
                     e.touches[0].pageY - e.touches[1].pageY
                 );
             } else if (e.touches.length === 1) {
-                panStartX = e.touches[0].pageX;
-                panStartY = e.touches[0].pageY;
+                isPanning = true;
+                lastTouchX = e.touches[0].pageX;
+                lastTouchY = e.touches[0].pageY;
                 touchStartX = e.touches[0].screenX;
             }
         }, { passive: false });
@@ -368,20 +372,28 @@
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
-                
                 const delta = dist / startDist;
                 scale = Math.min(Math.max(1, lastScale * delta), 4);
-                
                 applyZoom();
-            } else if (e.touches.length === 1 && scale > 1) {
-                e.preventDefault();
+            } else if (e.touches.length === 1 && isPanning) {
                 const currentX = e.touches[0].pageX;
                 const currentY = e.touches[0].pageY;
                 
-                translateX = lastTranslateX + (currentX - panStartX);
-                translateY = lastTranslateY + (currentY - panStartY);
-                
-                applyZoom();
+                // Hitung selisih pergerakan dari posisi terakhir
+                const deltaX = currentX - lastTouchX;
+                const deltaY = currentY - lastTouchY;
+
+                // Jika sedang zoom, geser gambar sesuai jari
+                if (scale > 1.05) {
+                    e.preventDefault();
+                    translateX += deltaX;
+                    translateY += deltaY;
+                    applyZoom();
+                }
+
+                // Update posisi sentuhan terakhir
+                lastTouchX = currentX;
+                lastTouchY = currentY;
             }
         }, { passive: false });
 
@@ -389,12 +401,11 @@
             if (isZooming) {
                 lastScale = scale;
                 if (e.touches.length < 2) isZooming = false;
-                applyZoom(); // Pastikan batas tetap terjaga setelah lepas jari
-            } else if (scale > 1) {
-                lastTranslateX = translateX;
-                lastTranslateY = translateY;
-            } else {
+                applyZoom(); 
+            } else if (isPanning) {
+                isPanning = false;
                 touchEndX = e.changedTouches[0].screenX;
+                // Hanya slide halaman jika skala normal (tidak zoom)
                 if (scale <= 1.1) {
                     handleSwipe();
                 }
@@ -407,39 +418,29 @@
             if (touchEndX > touchStartX + threshold) prevPage();
         }
 
-        // --- FUNGSI CLAMPING (BATAS GESER) ---
+        // --- FUNGSI CLAMPING (BATAS GESER) TETAP PRESISI ---
         function applyZoom() {
             const activeEl = document.getElementById('view' + currentViewId);
             const wrapper = activeEl.querySelector('.zoom-wrapper');
             
-            // Dapatkan ukuran container saat ini
             const containerW = bookContainer.clientWidth;
             const containerH = bookContainer.clientHeight;
 
-            // Hitung lebar & tinggi gambar setelah diperbesar
             const zoomedW = lastFinalW * scale;
             const zoomedH = lastFinalH * scale;
 
-            // Hitung batas maksimal geser (Limit)
-            // Limit adalah setengah dari selisih ukuran (karena transform-origin di center)
             const limitX = Math.max(0, (zoomedW - containerW) / 2);
             const limitY = Math.max(0, (zoomedH - containerH) / 2);
 
-            // Batasi Nilai Translate agar tidak keluar jalur
+            // Batasi nilai agar tidak tenggelam
             translateX = Math.min(Math.max(translateX, -limitX), limitX);
             translateY = Math.min(Math.max(translateY, -limitY), limitY);
 
-            // Update variabel last untuk touch selanjutnya
-            lastTranslateX = translateX;
-            lastTranslateY = translateY;
-            
-            // Terapkan ke CSS
+            // Terapkan transformasi (translate harus dibagi scale karena transform-origin di center)
             wrapper.style.transform = `scale(${scale}) translate(${translateX / scale}px, ${translateY / scale}px)`;
             
             if (scale > 1.2) {
                 mainApp.classList.add('nav-hidden');
-            } else {
-                // Jangan paksa hapus nav-hidden di sini agar toggle manual tetap bekerja
             }
         }
 
@@ -448,13 +449,12 @@
             lastScale = 1;
             translateX = 0;
             translateY = 0;
-            lastTranslateX = 0;
-            lastTranslateY = 0;
+            lastTouchX = 0;
+            lastTouchY = 0;
             const wrapper = container.querySelector('.zoom-wrapper');
             if (wrapper) {
                 wrapper.style.transition = 'none';
                 wrapper.style.transform = `scale(1) translate(0, 0)`;
-                setTimeout(() => wrapper.style.transition = 'transform 0.1s ease-out', 50);
             }
         }
 
@@ -519,7 +519,6 @@
                 finalH = dispW / ratioNat;
             }
 
-            // Simpan dimensi visual terakhir untuk kalkulasi batas geser
             lastFinalW = finalW;
             lastFinalH = finalH;
 
@@ -534,7 +533,7 @@
         window.addEventListener('resize', () => {
             const activeEl = document.getElementById('view' + currentViewId);
             syncDimensions(activeEl);
-            if (scale > 1) applyZoom(); // Update batas jika layar diputar/resize saat zoom
+            if (scale > 1) applyZoom(); 
         });
 
         // --- FETCH DATA DARI data.json ---
