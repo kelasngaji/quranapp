@@ -204,6 +204,44 @@
         .btn-yt { background: #FF0000; }
         .btn-web { background: #2c3e50; }
 
+        /* --- MODAL RESUME (LANJUTKAN BACA) --- */
+        .resume-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 300; /* Di atas segalanya */
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .resume-box {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 320px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .resume-box h3 { margin-top: 0; color: #2c3e50; margin-bottom: 10px; font-size: 1.3rem;}
+        .resume-box p { color: #555; margin-bottom: 20px; font-size: 0.95rem; line-height: 1.4;}
+        .resume-actions { display: flex; flex-direction: column; gap: 10px; }
+        .btn-resume {
+            padding: 12px; border: none; border-radius: 6px; font-weight: bold; font-size: 1rem;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .btn-resume.yes { background: #27ae60; color: white; }
+        .btn-resume.yes:hover { background: #219653; }
+        .btn-resume.no { background: #ecf0f1; color: #7f8c8d; }
+        .btn-resume.no:hover { background: #bdc3c7; color: #2c3e50; }
+
+
         /* --- 2. AREA GAMBAR (CANVAS) --- */
         .book-container {
             width: 100%;
@@ -329,7 +367,7 @@
             </button>
         </div>
 
-        <!-- MODAL OVERLAY (Untuk Pop Up) -->
+        <!-- MODAL OVERLAY (Untuk Pop Up TOC & About) -->
         <div id="modalOverlay" class="modal-overlay" onclick="closeModal()">
             
             <!-- Modal Daftar Isi -->
@@ -381,6 +419,18 @@
             </div>
         </div>
 
+        <!-- MODAL RESUME (Lanjutkan Baca) -->
+        <div id="resumeModalOverlay" class="resume-overlay">
+            <div class="resume-box">
+                <h3>Lanjutkan Baca?</h3>
+                <p id="resumeTextMsg">Anda terakhir kali membaca Halaman X.</p>
+                <div class="resume-actions">
+                    <button class="btn-resume yes" id="btnResumeYes">Ya, Lanjutkan</button>
+                    <button class="btn-resume no" id="btnResumeNo">Mulai dari Awal</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -418,6 +468,42 @@
         // Input Halaman HTML element
         const jumpInput = document.getElementById('jumpInput');
 
+        // --- FUNGSI LOCAL STORAGE (SIMPAN HALAMAN TERAKHIR) ---
+        function saveLastPage(index) {
+            try {
+                localStorage.setItem('qarana_last_page', index);
+            } catch (e) {
+                console.warn("LocalStorage tidak didukung di browser ini.");
+            }
+        }
+
+        function getLastPage() {
+            try {
+                return parseInt(localStorage.getItem('qarana_last_page'));
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function showResumePrompt(savedIndex) {
+            const overlay = document.getElementById('resumeModalOverlay');
+            const textMsg = document.getElementById('resumeTextMsg');
+            
+            textMsg.innerText = `Anda terakhir membaca di Halaman ${savedIndex}. Lanjutkan?`;
+            overlay.style.display = 'flex';
+
+            document.getElementById('btnResumeYes').onclick = () => {
+                overlay.style.display = 'none';
+                loadPage(savedIndex, null); // Langsung muat halaman yang disimpan
+            };
+
+            document.getElementById('btnResumeNo').onclick = () => {
+                overlay.style.display = 'none';
+                loadPage(0, null); // Mulai dari awal (Cover)
+            };
+        }
+
+
         // --- LOGIKA UTAMA (SLIDE MULUS TANPA BLANK) ---
         function loadPage(index, direction = null) {
             if (index < 0 || index >= bookData.length) return;
@@ -441,6 +527,9 @@
 
             // Memperbarui UI TOC
             updateTocHighlight(index);
+
+            // Simpan jejak halaman ke Local Storage
+            saveLastPage(index);
 
             renderDataToElement(nextEl, index);
 
@@ -810,7 +899,17 @@
 
             if (bookData && bookData.length > 0) {
                 generateTOC(); // Bangun Daftar isi setelah data termuat
-                loadPage(0, null);
+
+                // Cek apakah ada history halaman terakhir dibaca
+                const savedPage = getLastPage();
+                
+                // Jika ada halaman tersimpan, pastikan halamannya valid, dan bukan cover
+                if (savedPage !== null && savedPage > 0 && savedPage < bookData.length) {
+                    showResumePrompt(savedPage);
+                } else {
+                    // Kalau tidak ada atau baru mulai, buka dari cover
+                    loadPage(0, null);
+                }
             } else {
                 pageIndicator.innerText = "Data Kosong";
             }
