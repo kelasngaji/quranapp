@@ -2,7 +2,6 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <!-- Viewport diperbarui untuk mendukung interaksi sentuhan yang lebih fleksibel -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Qarana Digital App</title>
     <style>
@@ -88,7 +87,6 @@
             background-color: transparent;
             overflow: hidden;
             position: relative;
-            /* Mencegah aksi default browser saat zoom kustom */
             touch-action: none; 
         }
 
@@ -103,7 +101,6 @@
             justify-content: center;
             align-items: center;
             
-            /* Transisi transform dipisahkan agar slide lancar */
             transition: transform 0.35s ease-out; 
             will-change: transform;
             
@@ -114,15 +111,17 @@
         .page-view.left   { transform: translateX(-100%); z-index: 5; }
         .page-view.right  { transform: translateX(100%); z-index: 5; }
 
-        /* Container tambahan untuk Zoom agar tidak bertabrakan dengan slide */
+        /* Container tambahan untuk Zoom & Pan */
         .zoom-wrapper {
             width: 100%;
             height: 100%;
             display: flex;
             justify-content: center;
             align-items: center;
+            /* Transisi transform untuk kelancaran zoom/geser */
             transition: transform 0.1s ease-out;
             transform-origin: center center;
+            will-change: transform;
         }
 
         /* Gambar Halaman */
@@ -216,6 +215,14 @@
         let lastScale = 1;
         let startDist = 0;
         let isZooming = false;
+        
+        // Variabel Pan (Geser)
+        let translateX = 0;
+        let translateY = 0;
+        let lastTranslateX = 0;
+        let lastTranslateY = 0;
+        let panStartX = 0;
+        let panStartY = 0;
 
         // --- LOGIKA UTAMA (SLIDE MULUS TANPA BLANK) ---
         function loadPage(index, direction = null) {
@@ -226,7 +233,7 @@
             const nextViewId = currentViewId === 1 ? 2 : 1;
             const nextEl = document.getElementById('view' + nextViewId);
 
-            // Reset Zoom saat pindah halaman
+            // Reset Zoom & Pan saat pindah halaman
             resetZoom(activeEl);
             resetZoom(nextEl);
 
@@ -317,7 +324,7 @@
         }
 
         function toggleNav() {
-            // Hanya toggle nav jika tidak sedang dalam kondisi zoom tinggi
+            // Hanya toggle nav jika skala normal agar tidak mengganggu navigasi saat zoom
             if (scale <= 1.1) {
                 mainApp.classList.toggle('nav-hidden');
             }
@@ -338,19 +345,20 @@
             else if (e.key === "ArrowLeft") prevPage();
         });
 
-        // Logika Swipe & Pinch Zoom Terintegrasi
-        let touchStartX = 0;
-        let touchEndX = 0;
-
+        // Logika Swipe & Pinch Zoom & Pan Terintegrasi
         bookContainer.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
+                // Mode Pinch Zoom
                 isZooming = true;
                 startDist = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
-            } else {
-                touchStartX = e.changedTouches[0].screenX;
+            } else if (e.touches.length === 1) {
+                // Mode Geser atau Slide
+                panStartX = e.touches[0].pageX;
+                panStartY = e.touches[0].pageY;
+                touchStartX = e.touches[0].screenX;
             }
         }, { passive: false });
 
@@ -366,6 +374,16 @@
                 scale = Math.min(Math.max(1, lastScale * delta), 4);
                 
                 applyZoom();
+            } else if (e.touches.length === 1 && scale > 1) {
+                // Mode Pan (Geser) ketika diperbesar
+                e.preventDefault();
+                const currentX = e.touches[0].pageX;
+                const currentY = e.touches[0].pageY;
+                
+                translateX = lastTranslateX + (currentX - panStartX);
+                translateY = lastTranslateY + (currentY - panStartY);
+                
+                applyZoom();
             }
         }, { passive: false });
 
@@ -373,9 +391,13 @@
             if (isZooming) {
                 lastScale = scale;
                 if (e.touches.length < 2) isZooming = false;
+            } else if (scale > 1) {
+                // Simpan koordinat geser terakhir
+                lastTranslateX = translateX;
+                lastTranslateY = translateY;
             } else {
                 touchEndX = e.changedTouches[0].screenX;
-                // Hanya swipe jika tidak sedang zoom
+                // Hanya slide halaman jika skala normal
                 if (scale <= 1.1) {
                     handleSwipe();
                 }
@@ -391,9 +413,11 @@
         function applyZoom() {
             const activeEl = document.getElementById('view' + currentViewId);
             const wrapper = activeEl.querySelector('.zoom-wrapper');
-            wrapper.style.transform = `scale(${scale})`;
             
-            // Sembunyikan Navigasi otomatis saat zoom agar fokus
+            // Terapkan scale dan translate secara bersamaan
+            wrapper.style.transform = `scale(${scale}) translate(${translateX / scale}px, ${translateY / scale}px)`;
+            
+            // Sembunyikan navigasi saat diperbesar agar fokus
             if (scale > 1.2) {
                 mainApp.classList.add('nav-hidden');
             }
@@ -402,14 +426,21 @@
         function resetZoom(container) {
             scale = 1;
             lastScale = 1;
+            translateX = 0;
+            translateY = 0;
+            lastTranslateX = 0;
+            lastTranslateY = 0;
             const wrapper = container.querySelector('.zoom-wrapper');
-            if (wrapper) wrapper.style.transform = `scale(1)`;
+            if (wrapper) {
+                wrapper.style.transition = 'none'; // Instant reset
+                wrapper.style.transform = `scale(1) translate(0, 0)`;
+                setTimeout(() => wrapper.style.transition = 'transform 0.1s ease-out', 50);
+            }
         }
 
-        // Klik untuk toggle nav (dengan deteksi zoom)
+        // Klik untuk toggle nav (dengan deteksi area klik)
         bookContainer.addEventListener('click', (e) => {
-            // Jika diklik tapi tidak di hotspot
-            if (!e.target.classList.contains('hotspot-zone')) {
+            if (!e.target.classList.contains('hotspot-zone') && scale <= 1.1) {
                 toggleNav();
             }
         });
