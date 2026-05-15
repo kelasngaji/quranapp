@@ -2,7 +2,8 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Viewport diperbarui untuk mendukung interaksi sentuhan yang lebih fleksibel -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Qarana Digital App</title>
     <style>
         /* RESET & DASAR */
@@ -87,6 +88,8 @@
             background-color: transparent;
             overflow: hidden;
             position: relative;
+            /* Mencegah aksi default browser saat zoom kustom */
+            touch-action: none; 
         }
 
         /* WADAH HALAMAN (Double Buffer System) */
@@ -100,6 +103,7 @@
             justify-content: center;
             align-items: center;
             
+            /* Transisi transform dipisahkan agar slide lancar */
             transition: transform 0.35s ease-out; 
             will-change: transform;
             
@@ -109,6 +113,17 @@
         .page-view.active { transform: translateX(0); z-index: 10; }
         .page-view.left   { transform: translateX(-100%); z-index: 5; }
         .page-view.right  { transform: translateX(100%); z-index: 5; }
+
+        /* Container tambahan untuk Zoom agar tidak bertabrakan dengan slide */
+        .zoom-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.1s ease-out;
+            transform-origin: center center;
+        }
 
         /* Gambar Halaman */
         .page-image {
@@ -160,18 +175,22 @@
         </div>
 
         <!-- AREA BUKU (Double Buffer) -->
-        <div class="book-container" onclick="toggleNav()">
+        <div class="book-container" id="bookContainer">
             
             <!-- Wadah 1 -->
             <div id="view1" class="page-view active">
-                <img class="page-image" src="" alt="">
-                <div class="hotspot-layer"></div>
+                <div class="zoom-wrapper">
+                    <img class="page-image" src="" alt="">
+                    <div class="hotspot-layer"></div>
+                </div>
             </div>
 
             <!-- Wadah 2 -->
             <div id="view2" class="page-view right">
-                <img class="page-image" src="" alt="">
-                <div class="hotspot-layer"></div>
+                <div class="zoom-wrapper">
+                    <img class="page-image" src="" alt="">
+                    <div class="hotspot-layer"></div>
+                </div>
             </div>
 
         </div>
@@ -188,8 +207,15 @@
         const mainApp = document.getElementById('mainApp');
         const navBar = document.getElementById('navBar');
         const pageIndicator = document.getElementById('pageIndicator');
+        const bookContainer = document.getElementById('bookContainer');
         let currentAudio = null;
         let isAnimating = false;
+
+        // Variabel Zoom & Pan
+        let scale = 1;
+        let lastScale = 1;
+        let startDist = 0;
+        let isZooming = false;
 
         // --- LOGIKA UTAMA (SLIDE MULUS TANPA BLANK) ---
         function loadPage(index, direction = null) {
@@ -199,6 +225,10 @@
             const activeEl = document.getElementById('view' + currentViewId);
             const nextViewId = currentViewId === 1 ? 2 : 1;
             const nextEl = document.getElementById('view' + nextViewId);
+
+            // Reset Zoom saat pindah halaman
+            resetZoom(activeEl);
+            resetZoom(nextEl);
 
             if (index === 0) {
                 pageIndicator.innerText = "Cover";
@@ -287,7 +317,10 @@
         }
 
         function toggleNav() {
-            mainApp.classList.toggle('nav-hidden');
+            // Hanya toggle nav jika tidak sedang dalam kondisi zoom tinggi
+            if (scale <= 1.1) {
+                mainApp.classList.toggle('nav-hidden');
+            }
         }
 
         function prevPage(e) { 
@@ -305,16 +338,48 @@
             else if (e.key === "ArrowLeft") prevPage();
         });
 
+        // Logika Swipe & Pinch Zoom Terintegrasi
         let touchStartX = 0;
         let touchEndX = 0;
 
-        document.addEventListener('touchstart', (e) => {
-            touchStartX = e.changedTouches[0].screenX;
-        }, false);
+        bookContainer.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                isZooming = true;
+                startDist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+            } else {
+                touchStartX = e.changedTouches[0].screenX;
+            }
+        }, { passive: false });
 
-        document.addEventListener('touchend', (e) => {
-            touchEndX = e.changedTouches[0].screenX;
-            handleSwipe();
+        bookContainer.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && isZooming) {
+                e.preventDefault();
+                const dist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                
+                const delta = dist / startDist;
+                scale = Math.min(Math.max(1, lastScale * delta), 4);
+                
+                applyZoom();
+            }
+        }, { passive: false });
+
+        bookContainer.addEventListener('touchend', (e) => {
+            if (isZooming) {
+                lastScale = scale;
+                if (e.touches.length < 2) isZooming = false;
+            } else {
+                touchEndX = e.changedTouches[0].screenX;
+                // Hanya swipe jika tidak sedang zoom
+                if (scale <= 1.1) {
+                    handleSwipe();
+                }
+            }
         }, false);
 
         function handleSwipe() {
@@ -322,6 +387,32 @@
             if (touchEndX < touchStartX - threshold) nextPage();
             if (touchEndX > touchStartX + threshold) prevPage();
         }
+
+        function applyZoom() {
+            const activeEl = document.getElementById('view' + currentViewId);
+            const wrapper = activeEl.querySelector('.zoom-wrapper');
+            wrapper.style.transform = `scale(${scale})`;
+            
+            // Sembunyikan Navigasi otomatis saat zoom agar fokus
+            if (scale > 1.2) {
+                mainApp.classList.add('nav-hidden');
+            }
+        }
+
+        function resetZoom(container) {
+            scale = 1;
+            lastScale = 1;
+            const wrapper = container.querySelector('.zoom-wrapper');
+            if (wrapper) wrapper.style.transform = `scale(1)`;
+        }
+
+        // Klik untuk toggle nav (dengan deteksi zoom)
+        bookContainer.addEventListener('click', (e) => {
+            // Jika diklik tapi tidak di hotspot
+            if (!e.target.classList.contains('hotspot-zone')) {
+                toggleNav();
+            }
+        });
 
         // --- FITUR AUDIO ---
         function playAudio(filename, element) {
@@ -360,8 +451,8 @@
             
             const natW = img.naturalWidth;
             const natH = img.naturalHeight;
-            const dispW = img.clientWidth; 
-            const dispH = img.clientHeight; 
+            const dispW = containerEl.clientWidth; 
+            const dispH = containerEl.clientHeight; 
 
             if (!natW || !natH) return; 
 
@@ -382,7 +473,7 @@
             layer.style.height = finalH + 'px';
             
             if (containerEl.id === 'view' + currentViewId) {
-                nav.style.width = finalW + 'px';
+                nav.style.width = Math.min(finalW, 600) + 'px';
             }
         }
 
