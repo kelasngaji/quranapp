@@ -127,13 +127,22 @@
             </div>
         </div>
         <div class="bottom-bar" id="bottomBar">
-            <button class="nav-btn" onclick="openModal(event, 'modalTOC')">
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-            </button>
-            <input type="number" id="jumpInput" class="page-input" placeholder="Hal">
-            <button class="nav-btn" onclick="openModal(event, 'modalAbout')">
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            </button>
+            <div style="display: flex; gap: 10px; flex: 1; justify-content: flex-start;">
+                <button class="nav-btn" onclick="openModal(event, 'modalTOC')" title="Daftar Isi">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                </button>
+                <button class="nav-btn" onclick="handleLogout(event)" title="Log Out" style="color: #ff6b6b;">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                </button>
+            </div>
+            <div style="flex: 1; display: flex; justify-content: center;">
+                <input type="number" id="jumpInput" class="page-input" placeholder="Hal" title="Loncat Halaman">
+            </div>
+            <div style="flex: 1; display: flex; justify-content: flex-end;">
+                <button class="nav-btn" onclick="openModal(event, 'modalAbout')" title="Tentang">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                </button>
+            </div>
         </div>
         <div id="modalOverlay" class="modal-overlay" onclick="closeModal()">
             <div id="modalTOC" class="modal-content" onclick="event.stopPropagation()">
@@ -291,6 +300,19 @@
                 err.style.display = 'block';
                 btn.innerText = "Masuk";
                 btn.disabled = false;
+            }
+        }
+
+        function handleLogout(e) {
+            if(e) e.stopPropagation();
+            if(confirm("Anda yakin ingin keluar dari akun?")) {
+                localStorage.removeItem('qarana_logged_in');
+                document.getElementById('loginUser').value = '';
+                document.getElementById('loginPass').value = '';
+                document.getElementById('loginError').style.display = 'none';
+                document.getElementById('loginOverlay').style.display = 'flex';
+                document.getElementById('btnLogin').innerText = "Masuk";
+                document.getElementById('btnLogin').disabled = false;
             }
         }
 
